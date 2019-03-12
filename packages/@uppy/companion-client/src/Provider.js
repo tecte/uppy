@@ -21,6 +21,13 @@ module.exports = class Provider extends RequestClient {
     return Object.assign({}, super.defaultHeaders, {'uppy-auth-token': this.getAuthToken()})
   }
 
+  onReceiveResponse (response) {
+    response = super.onReceiveResponse(response)
+    const authenticated = response.status !== 401
+    this.uppy.getPlugin(this.pluginId).setPluginState({ authenticated })
+    return response
+  }
+
   // @todo(i.olarewaju) consider whether or not this method should be exposed
   setAuthToken (token) {
     // @todo(i.olarewaju) add fallback for OOM storage
@@ -29,13 +36,6 @@ module.exports = class Provider extends RequestClient {
 
   getAuthToken () {
     return this.uppy.getPlugin(this.pluginId).storage.getItem(this.tokenKey)
-  }
-
-  checkAuth () {
-    return this.get(`${this.id}/authorized`)
-      .then((payload) => {
-        return payload.authenticated
-      })
   }
 
   authUrl () {
@@ -51,9 +51,9 @@ module.exports = class Provider extends RequestClient {
   }
 
   logout (redirect = location.href) {
-    return this.get(`${this.id}/logout?redirect=${redirect}`)
+    return this.get(`${this.id}/logout?redirect=${redirect}`, true)
       .then((res) => {
-        this.storage.removeItem(this.tokenKey)
+        this.uppy.getPlugin(this.pluginId).storage.removeItem(this.tokenKey)
         return res
       })
   }

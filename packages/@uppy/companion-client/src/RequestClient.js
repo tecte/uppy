@@ -29,6 +29,16 @@ module.exports = class RequestClient {
     return Object.assign({}, this.defaultHeaders, this.opts.serverHeaders || {})
   }
 
+  _getPostResponseFunc (skip) {
+    return (response) => {
+      if (!skip) {
+        return this.onReceiveResponse(response)
+      }
+
+      return response
+    }
+  }
+
   onReceiveResponse (response) {
     const state = this.uppy.getState()
     const companion = state.companion || {}
@@ -52,49 +62,53 @@ module.exports = class RequestClient {
     return `${this.hostname}/${url}`
   }
 
-  get (path) {
+  _json (res) {
+    if (res.status === 401) {
+      throw new Error('Auth required')
+    }
+
+    if (res.status < 200 || res.status > 300) {
+      throw new Error(`Failed request to ${res.url}. ${res.statusText}`)
+    }
+    return res.json()
+  }
+
+  get (path, skipPostResponse) {
     return fetch(this._getUrl(path), {
       method: 'get',
       headers: this.headers,
       credentials: 'same-origin'
     })
-      // @todo validate response status before calling json
-      .then(this.onReceiveResponse)
-      .then((res) => res.json())
+      .then(this._getPostResponseFunc(skipPostResponse))
+      .then((res) => this._json(res))
       .catch((err) => {
         throw new Error(`Could not get ${this._getUrl(path)}. ${err}`)
       })
   }
 
-  post (path, data) {
+  post (path, data, skipPostResponse) {
     return fetch(this._getUrl(path), {
       method: 'post',
       headers: this.headers,
       credentials: 'same-origin',
       body: JSON.stringify(data)
     })
-      .then(this.onReceiveResponse)
-      .then((res) => {
-        if (res.status < 200 || res.status > 300) {
-          throw new Error(`Could not post ${this._getUrl(path)}. ${res.statusText}`)
-        }
-        return res.json()
-      })
+      .then(this._getPostResponseFunc(skipPostResponse))
+      .then((res) => this._json(res))
       .catch((err) => {
         throw new Error(`Could not post ${this._getUrl(path)}. ${err}`)
       })
   }
 
-  delete (path, data) {
+  delete (path, data, skipPostResponse) {
     return fetch(`${this.hostname}/${path}`, {
       method: 'delete',
       headers: this.headers,
       credentials: 'same-origin',
       body: data ? JSON.stringify(data) : null
     })
-      .then(this.onReceiveResponse)
-      // @todo validate response status before calling json
-      .then((res) => res.json())
+      .then(this._getPostResponseFunc(skipPostResponse))
+      .then((res) => this._json(res))
       .catch((err) => {
         throw new Error(`Could not delete ${this._getUrl(path)}. ${err}`)
       })
